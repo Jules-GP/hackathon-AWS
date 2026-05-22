@@ -2,34 +2,29 @@
  * ============================================================
  * FICHIER : src/content/index.ts
  * RÔLE    : Content Script — extraction du contenu de la page
- * RESPONSABLE : Personne C
- * ------------------------------------------------------------
- * FONCTIONNALITÉS À IMPLÉMENTER :
- *
- * 1. Extraire le texte pertinent de la page (title, meta, body)
- * 2. Nettoyer le DOM (supprimer nav, footer, aside, scripts, pubs)
- * 3. Tronquer le contenu à ~4000 tokens pour limiter les coûts
- * 4. Détecter la sélection de texte de l'utilisateur
- * 5. Répondre aux messages du Service Worker ("get_page_content")
- * 6. Observer les mutations DOM pour les SPA (MutationObserver)
+ * ============================================================
+ * Gère :
+ * - Extraction du texte pertinent (suppression nav, footer, ads)
+ * - Troncature à ~4000 tokens (15000 caractères)
+ * - Détection de la sélection utilisateur
+ * - MutationObserver pour les SPA (détecte les changements de page)
+ * - Réponse aux messages du Service Worker
  * ============================================================
  */
 
+// Sélecteurs des éléments à supprimer (bruit)
 const SELECTORS_TO_REMOVE = [
-  "nav",
-  "footer",
-  "header",
-  "aside",
-  "script",
-  "style",
-  "noscript",
-  "[role='banner']",
-  "[role='navigation']",
-  "[aria-hidden='true']",
+  "nav", "footer", "header", "aside",
+  "script", "style", "noscript", "iframe",
+  "[role='banner']", "[role='navigation']", "[role='complementary']",
+  "[aria-hidden='true']", ".ad", ".ads", ".advertisement",
+  ".cookie-banner", ".popup", ".modal",
 ];
 
-const MAX_CONTENT_LENGTH = 15000; // ~4000 tokens
+// Limite de caractères (~4000 tokens)
+const MAX_CONTENT_LENGTH = 15000;
 
+// --- Extraction du contenu textuel nettoyé ---
 function extractPageContent(): string {
   const clone = document.body.cloneNode(true) as HTMLElement;
 
@@ -38,28 +33,43 @@ function extractPageContent(): string {
     clone.querySelectorAll(selector).forEach((el) => el.remove());
   });
 
+  // Nettoyer les espaces multiples et retourner le texte tronqué
   const text = clone.innerText.replace(/\s+/g, " ").trim();
   return text.slice(0, MAX_CONTENT_LENGTH);
 }
 
+// --- Récupère le texte sélectionné par l'utilisateur ---
 function getSelectedText(): string {
   return window.getSelection()?.toString().trim() || "";
 }
 
-// Écoute les messages du Service Worker
+// --- Écoute les messages du Service Worker ---
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === "get_page_content") {
-    const selectedText = getSelectedText();
     sendResponse({
       title: document.title,
       url: window.location.href,
       content: extractPageContent(),
-      selectedText,
+      selectedText: getSelectedText(),
     });
   }
-  return true;
+  return true; // Réponse asynchrone
 });
 
-// TODO: MutationObserver pour détecter les changements de page (SPA)
-// const observer = new MutationObserver(() => { ... });
-// observer.observe(document.body, { childList: true, subtree: true });
+// --- MutationObserver pour les SPA ---
+// Détecte les changements majeurs de contenu (navigation SPA)
+let lastUrl = window.location.href;
+
+const observer = new MutationObserver(() => {
+  const currentUrl = window.location.href;
+  // Si l'URL a changé, notifier le background (nouvelle page)
+  if (currentUrl !== lastUrl) {
+    lastUrl = currentUrl;
+    chrome.runtime.sendMessage({ type: "page_changed", url: currentUrl }).catch(() => {
+      // Ignorer si le background n'écoute pas ce message
+    });
+  }
+});
+
+// Observer les changements dans le body (ajout/suppression de nœuds)
+observer.observe(document.body, { childList: true, subtree: true });
