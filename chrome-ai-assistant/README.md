@@ -1,3 +1,4 @@
+
 # 🤖 Chrome AI Assistant
 
 Extension Chrome qui ouvre un panneau de chat latéral (Side Panel) permettant d'interroger une IA sur le contenu de la page courante : questions, résumés, traduction, assistance.
