@@ -1,0 +1,10 @@
+/**
+ * ============================================================
+ * FICHIER : src/panel/styles.css
+ * RÔLE    : Point d'entrée Tailwind CSS pour le Side Panel
+ * ============================================================
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
